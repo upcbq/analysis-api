@@ -5,7 +5,7 @@ services:
     build:
       context: ../../
       dockerfile: ./analysis-api/docker/node/Dockerfile
-    image: analysisapi
+    image: registry.docker.upcbq.com:443/analysisapi:${TAG:-latest}
     container_name: analysisapi
     restart: unless-stopped
     ports:
