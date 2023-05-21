@@ -1,5 +1,3 @@
-import isEqual from 'lodash/isEqual';
-
 export class Trie {
   __type = 'trie';
   children: Record<string, Trie> = {};
