@@ -1,6 +1,7 @@
 import { IReference } from '@shared/types/reference';
 import mongoose from 'mongoose';
 import { IVerseList } from '@/models/verseList.model';
+import { stringToWordReference, wordReferenceToString } from '@/utils/utilityFunctions';
 
 export type IWordReference = IReference & {
   word: number;
@@ -68,10 +69,15 @@ export const ManualTagSchema = new mongoose.Schema(
       required: true,
       default: 1,
     },
+    relatedRefs: {
+      type: [String],
+      required: true,
+      default: [],
+    },
   },
   {
     toObject: {
-      virtuals: ['reference'],
+      virtuals: ['related'],
     },
     timestamps: false,
     useNestedStrict: true,
@@ -80,10 +86,23 @@ export const ManualTagSchema = new mongoose.Schema(
 
 ManualTagSchema.index({ wordIndex: 1, verseIndex: 1 }, { unique: false });
 ManualTagSchema.index({ wordIndex: 1, verseIndex: 1, tag: 1, removeTags: 1 }, { unique: true });
+ManualTagSchema.virtual('related', {
+  get: function () {
+    return (this.relatedRefs || []).map((ref: string) => stringToWordReference(ref));
+  },
+  set: function (val: IWordReference[] | string[]) {
+    this.relatedRefs = (val || []).map((val: IWordReference | string) => {
+      if (typeof val === 'string') return val;
+      return wordReferenceToString(val);
+    });
+  },
+});
 ManualTagSchema.set('toJSON', {
+  virtuals: ['related'],
   transform(doc, ret, options) {
     delete ret.__v;
     delete ret._id;
+    delete ret.relatedRefs;
   },
 });
 
@@ -97,5 +116,5 @@ export function getManualTagModel(verseList: IVerseList | string, skipInit = tru
 }
 
 export function getManualTagCollectionName(verseListId: string) {
-  return `${verseListId}.ManualTag`;
+  return `${verseListId}.manualtags`;
 }

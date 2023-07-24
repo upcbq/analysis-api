@@ -128,6 +128,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
       const AutoTag = getAutoTagModel(verseList, true);
       const oneTimeWords = mappedWordFreq.filter((w) => w.ids.length === 1);
       const twoTimeWords = mappedWordFreq.filter((w) => w.ids.length === 2);
+      const threeTimeWords = mappedWordFreq.filter((w) => w.ids.length === 3);
       const tags: IAutoTag[] = [];
 
       for (const oneTimeWord of oneTimeWords) {
@@ -149,6 +150,21 @@ function isSub<T>(arr1: T[], arr2: T[]) {
               verseIndex: verseIndexFromWordReference(wordRef),
               wordIndex: wordRef.word,
               length: 1,
+              related: twoTimeWord.ids.filter((wr) => wr !== wordRef),
+            }),
+          );
+        }
+      }
+
+      for (const threeTimeWord of threeTimeWords) {
+        for (const wordRef of threeTimeWord.ids) {
+          tags.push(
+            new AutoTag({
+              tag: 'ThreeTime',
+              verseIndex: verseIndexFromWordReference(wordRef),
+              wordIndex: wordRef.word,
+              length: 1,
+              related: threeTimeWord.ids.filter((wr) => wr !== wordRef),
             }),
           );
         }
@@ -184,6 +200,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
         .listCollections({ name: getAutoTagCollectionName(verseList._id) })
         .toArray();
       if (hasCollection.length) {
+        console.log(`dropped ${verseList.year} ${verseList.division}`);
         await AutoTag.collection.drop();
       }
       await AutoTag.insertMany(tags);
