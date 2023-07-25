@@ -116,6 +116,12 @@ function isSub<T>(arr1: T[], arr2: T[]) {
           return {
             word: k,
             ids: wordFreq[k],
+            verses: wordFreq[k].reduce((dedup, w) => {
+              if (!dedup.some((dw) => w.book === dw.book && w.chapter === dw.chapter && w.verse === dw.verse)) {
+                dedup.push(w);
+              }
+              return dedup;
+            }, [] as IWordReference[]),
           };
         })
         .filter((w) => w.ids.length <= 10);
@@ -126,9 +132,15 @@ function isSub<T>(arr1: T[], arr2: T[]) {
         );
       }
       const AutoTag = getAutoTagModel(verseList, true);
-      const oneTimeWords = mappedWordFreq.filter((w) => w.ids.length === 1);
-      const twoTimeWords = mappedWordFreq.filter((w) => w.ids.length === 2);
-      const threeTimeWords = mappedWordFreq.filter((w) => w.ids.length === 3);
+      const oneTimeWords = mappedWordFreq.filter((w) =>
+        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 1 : w.ids.length === 1,
+      );
+      const twoTimeWords = mappedWordFreq.filter((w) =>
+        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 2 : w.ids.length === 2,
+      );
+      const threeTimeWords = mappedWordFreq.filter((w) =>
+        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 3 : w.ids.length === 3,
+      );
       const tags: IAutoTag[] = [];
 
       for (const oneTimeWord of oneTimeWords) {
