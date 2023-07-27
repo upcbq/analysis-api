@@ -133,13 +133,19 @@ function isSub<T>(arr1: T[], arr2: T[]) {
       }
       const AutoTag = getAutoTagModel(verseList, true);
       const oneTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 1 : w.ids.length === 1,
+        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+          ? w.verses.length === 1
+          : w.ids.length === 1,
       );
       const twoTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 2 : w.ids.length === 2,
+        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+          ? w.verses.length === 2
+          : w.ids.length === 2,
       );
       const threeTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) ? w.verses.length === 3 : w.ids.length === 3,
+        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+          ? w.verses.length === 3
+          : w.ids.length === 3,
       );
       const tags: IAutoTag[] = [];
 
