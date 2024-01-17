@@ -6,6 +6,10 @@ import isEqual from 'lodash/isEqual';
 import { IWordReference } from '@/apiV1/manualTags/manualTag.model';
 import { stringToWordReference, wordReferenceToString } from '@/utils/utilityFunctions';
 import { IAutoTag, getAutoTagCollectionName, getAutoTagModel } from '@/apiV1/autoTags/autoTag.model';
+import { IStat, getStatCollectionName, getStatModel } from '@/apiV1/stats/stat.model';
+
+const ingestTags = true;
+const ingestStats = true;
 
 function isSub<T>(arr1: T[], arr2: T[]) {
   let i = 0,
@@ -42,7 +46,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
       ).map((v) => {
         return {
           ...v.toJSON(),
-          words: v.text.split(/\s/g).map((w) => w.replace(/\W/g, '').toLowerCase()),
+          words: v.text.split(/\s/g).map((w) => w.replace(/[^a-zA-Z']/g, '').toLowerCase()),
         };
       });
 
@@ -102,14 +106,18 @@ function isSub<T>(arr1: T[], arr2: T[]) {
               i !== j &&
               isSub(cp.phrase, c.phrase) &&
               isEqual(
-                cp.ids.map((id) => id.split('.')[0]),
-                c.ids.map((id) => id.split('.')[0]),
+                cp.ids,
+                c.ids,
               ),
           );
           return !phrase;
         })
-        .filter((p) => p.ids.length > 1 && p.ids.length <= 10)
-        .sort((a, b) => a.phrase.length - b.phrase.length);
+        .filter((p) => p.phrase.length > 2 || (p.ids.length < 2 && p.phrase.length > 1))
+        .map((p) => {
+          const { endIds, ...newP } = p;
+          return { ...newP };
+        })
+        .sort((a, b) => a.phrase.join(' ').localeCompare(b.phrase.join(' ')));
 
       const mappedWordFreq = Object.keys(wordFreq)
         .map((k) => {
@@ -131,97 +139,140 @@ function isSub<T>(arr1: T[], arr2: T[]) {
           (v) => v.book === wordRef?.book && v.chapter === wordRef?.chapter && v.verse === wordRef?.verse,
         );
       }
-      const AutoTag = getAutoTagModel(verseList, true);
-      const oneTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
-          ? w.verses.length === 1
-          : w.ids.length === 1,
-      );
-      const twoTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
-          ? w.verses.length === 2
-          : w.ids.length === 2,
-      );
-      const threeTimeWords = mappedWordFreq.filter((w) =>
-        ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
-          ? w.verses.length === 3
-          : w.ids.length === 3,
-      );
-      const tags: IAutoTag[] = [];
 
-      for (const oneTimeWord of oneTimeWords) {
-        tags.push(
-          new AutoTag({
-            tag: 'OneTime',
-            verseIndex: verseIndexFromWordReference(oneTimeWord.ids[0]),
-            wordIndex: oneTimeWord.ids[0].word,
-            length: 1,
-          }),
+      if (ingestTags) {
+        const AutoTag = getAutoTagModel(verseList, true);
+        const oneTimeWords = mappedWordFreq.filter((w) =>
+          ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+            ? w.verses.length === 1
+            : w.ids.length === 1,
         );
-      }
+        const twoTimeWords = mappedWordFreq.filter((w) =>
+          ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+            ? w.verses.length === 2
+            : w.ids.length === 2,
+        );
+        const threeTimeWords = mappedWordFreq.filter((w) =>
+          ['experienced', 'intermediate'].includes(verseList.division) && verseList.year >= 2023
+            ? w.verses.length === 3
+            : w.ids.length === 3,
+        );
+        const tags: IAutoTag[] = [];
 
-      for (const twoTimeWord of twoTimeWords) {
-        for (const wordRef of twoTimeWord.ids) {
+        for (const oneTimeWord of oneTimeWords) {
           tags.push(
             new AutoTag({
-              tag: 'TwoTime',
-              verseIndex: verseIndexFromWordReference(wordRef),
-              wordIndex: wordRef.word,
+              tag: 'OneTime',
+              verseIndex: verseIndexFromWordReference(oneTimeWord.ids[0]),
+              wordIndex: oneTimeWord.ids[0].word,
               length: 1,
-              related: twoTimeWord.ids.filter((wr) => wr !== wordRef),
             }),
           );
         }
-      }
 
-      for (const threeTimeWord of threeTimeWords) {
-        for (const wordRef of threeTimeWord.ids) {
+        for (const twoTimeWord of twoTimeWords) {
+          for (const wordRef of twoTimeWord.ids) {
+            tags.push(
+              new AutoTag({
+                tag: 'TwoTime',
+                verseIndex: verseIndexFromWordReference(wordRef),
+                wordIndex: wordRef.word,
+                length: 1,
+                related: twoTimeWord.ids.filter((wr) => wr !== wordRef),
+              }),
+            );
+          }
+        }
+
+        for (const threeTimeWord of threeTimeWords) {
+          for (const wordRef of threeTimeWord.ids) {
+            tags.push(
+              new AutoTag({
+                tag: 'ThreeTime',
+                verseIndex: verseIndexFromWordReference(wordRef),
+                wordIndex: wordRef.word,
+                length: 1,
+                related: threeTimeWord.ids.filter((wr) => wr !== wordRef),
+              }),
+            );
+          }
+        }
+
+        for (const uniqueBeginning of collapsedStart) {
+          const verseRef = uniqueBeginning.ids[0];
+          const wordRef = `${verseRef}.0`;
           tags.push(
             new AutoTag({
-              tag: 'ThreeTime',
-              verseIndex: verseIndexFromWordReference(wordRef),
-              wordIndex: wordRef.word,
-              length: 1,
-              related: threeTimeWord.ids.filter((wr) => wr !== wordRef),
+              tag: 'UniqueStart',
+              verseIndex: verseIndexFromWordReference(stringToWordReference(wordRef)),
+              wordIndex: 0,
+              length: uniqueBeginning.phrase.length,
             }),
           );
         }
+
+        for (const uniqueEnd of collapsedEnd) {
+          const lastWordRef = stringToWordReference(uniqueEnd.ids[0]);
+          const wordRef = wordReferenceToString({ ...lastWordRef, word: lastWordRef.word - uniqueEnd.phrase.length });
+          tags.push(
+            new AutoTag({
+              tag: 'UniqueEnd',
+              verseIndex: verseIndexFromWordReference(stringToWordReference(wordRef)),
+              wordIndex: lastWordRef.word - uniqueEnd.phrase.length,
+              length: uniqueEnd.phrase.length,
+            }),
+          );
+        }
+
+        const hasCollection = await AutoTag.db.db
+          .listCollections({ name: getAutoTagCollectionName(verseList._id) })
+          .toArray();
+        if (hasCollection.length) {
+          console.log(`dropped autotags for ${verseList.year} ${verseList.division}`);
+          await AutoTag.collection.drop();
+        }
+        await AutoTag.insertMany(tags);
       }
 
-      for (const uniqueBeginning of collapsedStart) {
-        const verseRef = uniqueBeginning.ids[0];
-        const wordRef = `${verseRef}.0`;
-        tags.push(
-          new AutoTag({
-            tag: 'UniqueStart',
-            verseIndex: verseIndexFromWordReference(stringToWordReference(wordRef)),
-            wordIndex: 0,
-            length: uniqueBeginning.phrase.length,
-          }),
-        );
-      }
+      if (ingestStats) {
+        const Stat = getStatModel(verseList, true);
+        const stats: IStat[] = [];
 
-      for (const uniqueEnd of collapsedEnd) {
-        const lastWordRef = stringToWordReference(uniqueEnd.ids[0]);
-        const wordRef = wordReferenceToString({ ...lastWordRef, word: lastWordRef.word - uniqueEnd.phrase.length });
-        tags.push(
-          new AutoTag({
-            tag: 'UniqueEnd',
-            verseIndex: verseIndexFromWordReference(stringToWordReference(wordRef)),
-            wordIndex: lastWordRef.word - uniqueEnd.phrase.length,
-            length: uniqueEnd.phrase.length,
-          }),
-        );
-      }
+        const sortedWords = Object.keys(wordFreq).sort();
 
-      const hasCollection = await AutoTag.db.db
-        .listCollections({ name: getAutoTagCollectionName(verseList._id) })
-        .toArray();
-      if (hasCollection.length) {
-        console.log(`dropped ${verseList.year} ${verseList.division}`);
-        await AutoTag.collection.drop();
+        for (let i = 0; i < sortedWords.length; i++) {
+          const word = sortedWords[i];
+          stats.push(new Stat({
+            references: wordFreq[word],
+            type: 'word',
+            text: word,
+            count: wordFreq[word].length,
+            sortOrder: i,
+          }));
+        }
+
+        for (let i = 0; i < filteredPhrase.length; i++) {
+          const phrase = filteredPhrase[i];
+          stats.push(new Stat({
+            references: phrase.ids.map((id) => stringToWordReference(id)),
+            type: 'phrase',
+            length: phrase.phrase.length,
+            text: phrase.phrase.join(' '),
+            count: phrase.ids.length,
+            sortOrder: i,
+          }))
+        }
+
+        const hasCollection = await Stat.db.db
+          .listCollections({ name: getStatCollectionName(verseList._id) })
+          .toArray();
+        if (hasCollection.length) {
+          console.log(`dropped stats for ${verseList.year} ${verseList.division}`);
+          await Stat.collection.drop();
+        }
+
+        await Stat.insertMany(stats);
       }
-      await AutoTag.insertMany(tags);
     }
   } catch (e) {
     console.log(e);
