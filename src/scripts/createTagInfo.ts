@@ -21,6 +21,14 @@ import '@/config/db';
           color: 'green',
         },
       },
+      ThreeTime: {
+        name: 'Three Time Word',
+        description: 'Words that are only contained in verses of study three times.',
+        tag: 'ThreeTime',
+        style: {
+          color: 'purple',
+        },
+      },
       UniqueStart: {
         name: 'Unique Start',
         description: 'The words at the start of the verse that make it unique. Useful for quotation completions.',

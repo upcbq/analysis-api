@@ -4,7 +4,7 @@ export class Trie {
   ids: string[] = [];
 
   public addString(str: string) {
-    const words = str.split(/\s/g).map((w) => w.replace(/\W/g, ''));
+    const words = str.split(/\s/g).map((w) => w.replace(/[^a-zA-Z']/g, ''));
     this.addWords(words);
   }
 

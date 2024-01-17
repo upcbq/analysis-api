@@ -1,5 +1,6 @@
 import { IWordReference } from '@/apiV1/manualTags/manualTag.model';
 import { IVerseList } from '@/models/verseList.model';
+import { stringToWordReference, wordReferenceToString } from '@/utils/utilityFunctions';
 import mongoose from 'mongoose';
 
 /**
@@ -25,6 +26,7 @@ export interface IAutoTagJson {
   verseIndex: number;
   wordIndex: number;
   length: number;
+  related: IWordReference[];
 }
 
 export interface IAutoTag extends mongoose.Document {
@@ -33,9 +35,10 @@ export interface IAutoTag extends mongoose.Document {
   verseIndex: number;
   wordIndex: number;
   length: number;
+  related: IWordReference[];
 }
 
-export const AutoTagSchema = new mongoose.Schema(
+export const AutoTagSchema = new mongoose.Schema<IAutoTag>(
   {
     wordIndex: {
       type: Number,
@@ -54,21 +57,42 @@ export const AutoTagSchema = new mongoose.Schema(
       required: true,
       default: 1,
     },
+    relatedRefs: {
+      type: [String],
+      required: true,
+      default: [],
+    },
   },
   {
     timestamps: false,
     useNestedStrict: true,
+    toJSON: {
+      virtuals: ['related'],
+      transform(doc, ret, options) {
+        delete ret.__v;
+        delete ret._id;
+        delete ret.relatedRefs;
+      },
+    },
+    toObject: {
+      virtuals: ['related'],
+    },
   },
 );
 
 AutoTagSchema.index({ verseIndex: 1, wordIndex: 1 }, { unique: false });
 AutoTagSchema.index({ verseIndex: 1, tag: 1, wordIndex: 1 }, { unique: true });
-AutoTagSchema.set('toJSON', {
-  transform(doc, ret, options) {
-    delete ret.__v;
-    delete ret._id;
-  },
-});
+AutoTagSchema.virtual('related')
+  .get(function () {
+    return (this.relatedRefs || []).map((ref: string) => stringToWordReference(ref));
+  })
+  .set(function (val: IWordReference[] | string[]) {
+    const result = (val || []).map((v: IWordReference | string) => {
+      if (typeof v === 'string') return v;
+      return wordReferenceToString(v);
+    });
+    this.set('relatedRefs', result);
+  });
 
 const modelCache: Record<string, mongoose.Model<IAutoTag, {}, {}>> = {};
 export function getAutoTagModel(verseList: IVerseList | string, skipInit = true) {
@@ -81,5 +105,5 @@ export function getAutoTagModel(verseList: IVerseList | string, skipInit = true)
 }
 
 export function getAutoTagCollectionName(verseListId: string) {
-  return `${verseListId}.AutoTag`;
+  return `${verseListId}.autotags`;
 }
