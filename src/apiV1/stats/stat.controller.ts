@@ -1,12 +1,44 @@
 import { Request, Response } from 'express';
 import { internalServerError } from '@shared/helpers/errorHandler';
-import { IGetSingleWordStatRequest, IGetWordStatsQuery, IGetWordStatsRequest, IGetWordsStatsQuery } from '@/types/requests/stats/getWordStatsRequest';
-import { IGetPhraseStatsQuery, IGetPhraseStatsRequest, IGetPhrasesStatsQuery, IGetSinglePhraseStatRequest } from '@/types/requests/stats/getPhraseStatsRequest';
+import {
+  IGetSingleWordStatRequest,
+  IGetWordStatsQuery,
+  IGetWordStatsRequest,
+  IGetWordsStatsQuery,
+} from '@/types/requests/stats/getWordStatsRequest';
+import {
+  IGetPhraseStatsQuery,
+  IGetPhraseStatsRequest,
+  IGetPhrasesStatsQuery,
+  IGetSinglePhraseStatRequest,
+} from '@/types/requests/stats/getPhraseStatsRequest';
 import { IStat, getStatModel } from './stat.model';
 import httpStatus from 'http-status';
 import { FilterQuery } from 'mongoose';
 
 const MAX_STATS = 50;
+
+function buildQuery(
+  getStatsQuery: IGetPhrasesStatsQuery | IGetWordsStatsQuery,
+  type: 'word' | 'phrase',
+): FilterQuery<IStat> {
+  const min = +getStatsQuery.min;
+  const max = +getStatsQuery.max;
+  const query: FilterQuery<IStat> = { type };
+  if (!isNaN(min)) {
+    if (!query.count) {
+      query.count = {};
+    }
+    query.count['$gte'] = min;
+  }
+  if (!isNaN(max)) {
+    if (!query.count) {
+      query.count = {};
+    }
+    query.count['$lte'] = max;
+  }
+  return query;
+}
 
 export class StatController {
   /**
@@ -15,29 +47,18 @@ export class StatController {
    */
   public static async getWords(req: Request<IGetWordStatsRequest, any, any, IGetWordsStatsQuery>, res: Response) {
     try {
-      const min = +req.query.min;
-      const max = +req.query.max;
-
-      const query: FilterQuery<IStat> = { type: 'word' };
-      if (!isNaN(min)) {
-        if (!query.count) {
-          query.count = {};
-        }
-        query.count['$gte'] = min;
-      }
-      if (!isNaN(max)) {
-        if (!query.count) {
-          query.count = {};
-        }
-        query.count['$lte'] = max;
-      }
+      const query = buildQuery(req.query, 'word');
 
       const Stat = getStatModel(req.params.verseListId);
 
-      const words = await Stat.find(query).select('text count -_id').sort({ sortOrder: 'asc' }).exec();
+      const words = await Stat.find(query)
+        .select('text count -_id')
+        .sort({ 'references.verseIndex': 'asc', 'references.wordIndex': 'asc' })
+        .exec();
 
       res.status(httpStatus.OK).json(words.map((w) => ({ text: w.text, count: w.count })));
     } catch (err) {
+      console.log('e', err);
       internalServerError(err, req, res);
     }
   }
@@ -60,10 +81,13 @@ export class StatController {
           ],
         });
       }
+      const query = buildQuery(req.query, 'word');
 
       const Stat = getStatModel(req.params.verseListId);
 
-      const wordStats = await Stat.find({ type: 'word', sortOrder: { $gte: start, $lt: end } }).sort({ sortOrder: 'asc' }).exec();
+      const wordStats = await Stat.find({ ...query, sortOrder: { $gte: start, $lt: end } })
+        .sort({ sortOrder: 'asc' })
+        .exec();
 
       res.status(httpStatus.OK).json(wordStats);
     } catch (err) {
@@ -92,26 +116,14 @@ export class StatController {
    */
   public static async getPhrases(req: Request<IGetPhraseStatsRequest, any, any, IGetPhrasesStatsQuery>, res: Response) {
     try {
-      const min = +req.query.min;
-      const max = +req.query.max;
-
-      const query: FilterQuery<IStat> = { type: 'phrase' };
-      if (!isNaN(min)) {
-        if (!query.count) {
-          query.count = {};
-        }
-        query.count['$gte'] = min;
-      }
-      if (!isNaN(max)) {
-        if (!query.count) {
-          query.count = {};
-        }
-        query.count['$lte'] = max;
-      }
+      const query = buildQuery(req.query, 'phrase');
 
       const Stat = getStatModel(req.params.verseListId);
 
-      const phrases = await Stat.find(query).select('text count -_id').sort({ sortOrder: 'asc' }).exec();
+      const phrases = await Stat.find(query)
+        .select('text count -_id')
+        .sort({ 'references.verseIndex': 'asc', 'references.wordIndex': 'asc' })
+        .exec();
 
       res.status(httpStatus.OK).json(phrases.map((p) => ({ text: p.text, count: p.count })));
     } catch (err) {
@@ -123,7 +135,10 @@ export class StatController {
    * Gets full stats for phrases in a verseList. Paginated with a max number of phrases per request.
    * Paginate using the `start` and `end` query params.
    */
-  public static async getPhraseStats(req: Request<IGetPhraseStatsRequest, any, any, IGetPhraseStatsQuery>, res: Response) {
+  public static async getPhraseStats(
+    req: Request<IGetPhraseStatsRequest, any, any, IGetPhraseStatsQuery>,
+    res: Response,
+  ) {
     try {
       const start = +(req.query.start || 0);
       const end =
@@ -137,10 +152,13 @@ export class StatController {
           ],
         });
       }
+      const query = buildQuery(req.query, 'phrase');
 
       const Stat = getStatModel(req.params.verseListId);
 
-      const phraseStats = await Stat.find({ type: 'phrase', sortOrder: { $gte: start, $lt: end } }).sort({ sortOrder: 'asc' }).exec();
+      const phraseStats = await Stat.find({ ...query, sortOrder: { $gte: start, $lt: end } })
+        .sort({ sortOrder: 'asc' })
+        .exec();
 
       res.status(httpStatus.OK).json(phraseStats);
     } catch (err) {

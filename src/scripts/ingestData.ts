@@ -1,5 +1,5 @@
 import '@/config/db';
-import VerseList from '@/models/verseList.model';
+import VerseList, { IVerseList } from '@/models/verseList.model';
 import Verse from '@/models/verse.model';
 import { Trie } from './trie';
 import isEqual from 'lodash/isEqual';
@@ -7,8 +7,9 @@ import { IWordReference } from '@/apiV1/manualTags/manualTag.model';
 import { stringToWordReference, wordReferenceToString } from '@/utils/utilityFunctions';
 import { IAutoTag, getAutoTagCollectionName, getAutoTagModel } from '@/apiV1/autoTags/autoTag.model';
 import { IStat, getStatCollectionName, getStatModel } from '@/apiV1/stats/stat.model';
+import { refToVerseListRef } from '@shared/utilities/utilityFunctions';
 
-const ingestTags = true;
+const ingestTags = false;
 const ingestStats = true;
 
 function isSub<T>(arr1: T[], arr2: T[]) {
@@ -102,13 +103,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
       const filteredPhrase = collapsedPhrase
         .filter((c, i) => {
           const phrase = collapsedPhrase.find(
-            (cp, j) =>
-              i !== j &&
-              isSub(cp.phrase, c.phrase) &&
-              isEqual(
-                cp.ids,
-                c.ids,
-              ),
+            (cp, j) => i !== j && isSub(cp.phrase, c.phrase) && isEqual(cp.ids, c.ids),
           );
           return !phrase;
         })
@@ -235,32 +230,40 @@ function isSub<T>(arr1: T[], arr2: T[]) {
       }
 
       if (ingestStats) {
-        const Stat = getStatModel(verseList, true);
+        const Stat = await getStatModel(verseList, false);
         const stats: IStat[] = [];
 
         const sortedWords = Object.keys(wordFreq).sort();
 
         for (let i = 0; i < sortedWords.length; i++) {
           const word = sortedWords[i];
-          stats.push(new Stat({
-            references: wordFreq[word],
-            type: 'word',
-            text: word,
-            count: wordFreq[word].length,
-            sortOrder: i,
-          }));
+          stats.push(
+            new Stat({
+              references: wordFreq[word]
+                .map((ref) => refToVerseListRef(ref, verseList))
+                .sort((a, b) => a.verseIndex - b.verseIndex),
+              type: 'word',
+              text: word,
+              count: wordFreq[word].length,
+              sortOrder: i,
+            }),
+          );
         }
 
         for (let i = 0; i < filteredPhrase.length; i++) {
           const phrase = filteredPhrase[i];
-          stats.push(new Stat({
-            references: phrase.ids.map((id) => stringToWordReference(id)),
-            type: 'phrase',
-            length: phrase.phrase.length,
-            text: phrase.phrase.join(' '),
-            count: phrase.ids.length,
-            sortOrder: i,
-          }))
+          stats.push(
+            new Stat({
+              references: phrase.ids
+                .map((id) => refToVerseListRef(stringToWordReference(id), verseList))
+                .sort((a, b) => a.verseIndex - b.verseIndex),
+              type: 'phrase',
+              length: phrase.phrase.length,
+              text: phrase.phrase.join(' '),
+              count: phrase.ids.length,
+              sortOrder: i,
+            }),
+          );
         }
 
         const hasCollection = await Stat.db.db

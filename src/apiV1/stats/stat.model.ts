@@ -1,14 +1,14 @@
 import mongoose from 'mongoose';
-import { IWordReference } from '@/apiV1/manualTags/manualTag.model';
 import { IVerseList } from '@/models/verseList.model';
-import { stringToWordReference, wordReferenceToString } from '@/utils/utilityFunctions';
+import { stringToVerseListReference, verseListReferenceToString } from '@shared/utilities/utilityFunctions';
+import { IVerseListWordReference } from '@shared/types/reference';
 
 export interface IStat {
   type: 'word' | 'phrase';
   length: number;
   count: number;
   text: string;
-  references: IWordReference[];
+  references: IVerseListWordReference[];
   sortOrder: number;
 }
 
@@ -17,6 +17,19 @@ export interface IStat {
  *
  * components:
  *   schemas:
+ *     VerseListReference:
+ *       type: object
+ *       properties:
+ *         verseIndex:
+ *           type: number
+ *     VerseListWordReference:
+ *       type: object
+ *       allOf:
+ *       - $ref: '#/components/schemas/VerseListReference'
+ *       - type: object
+ *         properties:
+ *           wordIndex:
+ *             type: number
  *     Stat:
  *       type: object
  *       properties:
@@ -33,7 +46,7 @@ export interface IStat {
  *         references:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/Reference'
+ *             $ref: '#/components/schemas/VerseListWordReference'
  *     LiteStat:
  *       type: object
  *       properties:
@@ -42,11 +55,16 @@ export interface IStat {
  *         text:
  *           type: string
  */
-
 export const StatSchema = new mongoose.Schema(
   {
-    refs: {
-      type: [String],
+    references: {
+      type: [
+        {
+          _id: false,
+          verseIndex: Number,
+          wordIndex: Number,
+        },
+      ],
       required: true,
       default: [],
     },
@@ -75,19 +93,15 @@ export const StatSchema = new mongoose.Schema(
   },
   {
     toJSON: {
-      virtuals: ['references'],
       transform(doc, ret, options) {
         delete ret.__v;
         delete ret._id;
-        delete ret.refs;
       },
     },
     toObject: {
-      virtuals: ['references'],
       transform(doc, ret, options) {
         delete ret.__v;
         delete ret._id;
-        delete ret.refs;
       },
     },
     timestamps: false,
@@ -98,16 +112,6 @@ export const StatSchema = new mongoose.Schema(
 StatSchema.index({ text: 1 }, { unique: true });
 StatSchema.index({ type: 1 }, { unique: false });
 StatSchema.index({ type: 1, sortOrder: 1 }, { unique: true });
-StatSchema.virtual('references')
-  .get(function() {
-    return (this.refs || []).map((ref: string) => stringToWordReference(ref));
-  })
-  .set(function (val: IWordReference[] | string[]) {
-    this.set('refs', (val || []).map((val: IWordReference | string) => {
-      if (typeof val === 'string') return val;
-      return wordReferenceToString(val);
-    }));
-  });
 
 const modelCache: Record<string, mongoose.Model<IStat, {}, {}>> = {};
 export function getStatModel(verseList: IVerseList | string, skipInit = true) {
