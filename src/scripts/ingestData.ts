@@ -1,5 +1,5 @@
 import '@/config/db';
-import VerseList, { IVerseList } from '@/models/verseList.model';
+import VerseList from '@/models/verseList.model';
 import Verse from '@/models/verse.model';
 import { Trie } from './trie';
 import isEqual from 'lodash/isEqual';
@@ -9,7 +9,7 @@ import { IAutoTag, getAutoTagCollectionName, getAutoTagModel } from '@/apiV1/aut
 import { IStat, getStatCollectionName, getStatModel } from '@/apiV1/stats/stat.model';
 import { refToVerseListRef } from '@shared/utilities/utilityFunctions';
 
-const ingestTags = false;
+const ingestTags = true;
 const ingestStats = true;
 
 function isSub<T>(arr1: T[], arr2: T[]) {
@@ -227,6 +227,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
           await AutoTag.collection.drop();
         }
         await AutoTag.insertMany(tags);
+        console.log(`inserted tags for ${verseList.year} ${verseList.division}`);
       }
 
       if (ingestStats) {
@@ -275,6 +276,7 @@ function isSub<T>(arr1: T[], arr2: T[]) {
         }
 
         await Stat.insertMany(stats);
+        console.log(`inserted stats for ${verseList.year} ${verseList.division}`);
       }
     }
   } catch (e) {
